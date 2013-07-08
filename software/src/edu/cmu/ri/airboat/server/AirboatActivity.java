@@ -283,6 +283,15 @@ public class AirboatActivity extends Activity {
 			}
 		});
         
+
+        final Button RechargeReturn = (Button)findViewById(R.id.RechargeReturn);
+        RechargeReturn.setOnClickListener(new OnClickListener() {
+    		public void onClick(View v) {
+    			// Start up the RechargeReturn control activity
+    			startActivity(new Intent(AirboatActivity.this, RechargeReturn.class));
+    		}
+    	});
+        
         // Register handler for failsafe address that changes color 
 		// if a valid hostname seems to be reached.
 		// TODO: Move this to its own class!

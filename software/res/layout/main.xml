@@ -26,5 +26,8 @@
 		<edu.cmu.ri.airboat.server.ReadOnlyToggleButton android:id="@+id/FailsafeToggle" android:text="@string/failsafe_toggle" android:layout_width="0dp" android:layout_weight="0.66" android:layout_height="fill_parent"></edu.cmu.ri.airboat.server.ReadOnlyToggleButton>
 		<Button android:id="@+id/HomeButton" android:text="@string/home_button" android:layout_width="0dp" android:layout_weight="0.33" android:layout_height="wrap_content"/>
 	</LinearLayout>
+	<LinearLayout android:layout_width="fill_parent" android:layout_height="fill_parent">
+        <Button android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="RechargeReturn" android:id="@+id/RechargeReturn"/>
+    </LinearLayout>
 </LinearLayout>
 </ScrollView>
