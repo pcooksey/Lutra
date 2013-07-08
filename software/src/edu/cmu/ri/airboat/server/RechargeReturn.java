@@ -256,8 +256,8 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				
 				/** Create mat for circles and apply the Hough Transform to find the circles */
 				Mat circles = new Mat();
-				//Imgproc.HoughCircles(img_hue, circles, Imgproc.CV_HOUGH_GRADIENT, 3, img_hue.rows()/9, 200, 70, 0, 80 ); //Old attributes
-				Imgproc.HoughCircles(img_hue, circles, Imgproc.CV_HOUGH_GRADIENT, 3, minDistance, 100, 50, minRadius, maxRadius );
+				//Imgproc.HoughCircles(img_hue, circles, Imgproc.CV_HOUGH_GRADIENT, 3, minDistance, 100, 50, minRadius, maxRadius ); //Old method
+				Imgproc.HoughCircles(img_hue, circles, Imgproc.CV_HOUGH_GRADIENT, 2, minDistance, 70, 25, minRadius, maxRadius );
 				
 				/** Draws the circles and angle */
 				drawCircles(img,circles);
@@ -291,14 +291,14 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				{
 					fileNum = 1;
 				}
-				//Mat temp = Highgui.imread("/sdcard/TestPics/test"+fileNum+".jpg");
-				Mat temp = Highgui.imread("/sdcard/TestPics/test120.jpg"); //120
+				Mat temp = Highgui.imread("/sdcard/TestPics/test"+fileNum+".jpg");
+				//Mat temp = Highgui.imread("/sdcard/TestPics/test120.jpg"); //120
 				Imgproc.cvtColor(temp, img_hue, Imgproc.COLOR_BGR2HSV);
 				img_hue = InRangeCircles(img_hue);
 				Imgproc.GaussianBlur(img_hue, img_hue, new Size(9,9), 10, 10 );
 				/** Create mat for circles and apply the Hough Transform to find the circles */
 				Mat circles2 = new Mat();
-				Imgproc.HoughCircles(img_hue, circles2, Imgproc.CV_HOUGH_GRADIENT, 3, minDistance, 100, 40, minRadius, maxRadius );
+				Imgproc.HoughCircles(img_hue, circles2, Imgproc.CV_HOUGH_GRADIENT, 2, minDistance, 70, 25, minRadius, maxRadius );
 				/** Draws the circles and angle */
 				drawCircles(temp,circles2);
 				return temp;
@@ -356,6 +356,8 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 					minRadius +=5;
 				if(maxRadius-10>minRadius)
 					maxRadius -=5;
+				if(minDistance+10<=100)
+					minDistance += 10;
 			}
 			
 			/** If it has not seen the circles in 10 frames something is wrong */
