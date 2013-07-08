@@ -30,7 +30,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.pm.ActivityInfo;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -42,7 +41,7 @@ import android.view.WindowManager;
 public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 	
 	public static final String TAG = RechargeReturn.class.getName();
-	//Logger log;
+	Logger log;
 	
 	private CameraBridgeViewBase mOpenCvCameraView;
 	private AirboatService vehicleService = null;
@@ -51,18 +50,23 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 	public static final int VIEW_MODE_RGBA = 0;
     public static final int VIEW_MODE_BW = 1;
     public static final int VIEW_MODE_PIC = 2;
+    public static final int VIEW_MODE_TEST = 3;
     
-    public static int viewMode = VIEW_MODE_BW;
+    public static int viewMode = VIEW_MODE_TEST;
 	
 	private MenuItem mItemRGBA;
     private MenuItem mItemBW;
     private MenuItem mItemPic;
+    private MenuItem mItemTEST;
     /** End of the view modes */
     
     /** Parameters for controlling the boat */
     private Twist twist;
     private double center = 0;
     private double circle1 = 0, circle2 = 0;
+    private int minRadius = 5;
+    private int maxRadius = 80;
+    private int minDistance = 25;
     
     // For the PD controller
     private double Kp = 2.5;
@@ -78,6 +82,8 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 	Mat temp, img_bw1, img_bw2;
 	
 	private int frameCount = 0;
+	boolean drawCircles = false;
+	private int fileNum = 1;
 	
 	private boolean _isBound = false;
 	
@@ -118,19 +124,18 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 		PicDirectory.mkdirs();
 		
 		/** Logging used by the class */
-		/*log = Logger.getLogger(RechargeReturn.class.getName());
+		log = Logger.getLogger(RechargeReturn.class.getName());
 		try {
 			Handler handler = new FileHandler("/sdcard/Logs/RechargeReturn.log", 2000000, 1);
 			log.addHandler(handler);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}*/
+		}
 		
 		doBindService();
 		
 		twist = new Twist();
-		
 	}
 
 	@Override
@@ -139,6 +144,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 		mItemRGBA  = menu.add("Normal");
         mItemBW  = menu.add("B&W");
         mItemPic = menu.add("Pic");
+        mItemTEST = menu.add("Test");
 		getMenuInflater().inflate(R.menu.recharge_return, menu);
 		return true;
 	}
@@ -152,6 +158,8 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
             viewMode = VIEW_MODE_BW;
         if (item == mItemPic)
         	viewMode = VIEW_MODE_PIC;
+        if (item == mItemTEST)
+        	viewMode = VIEW_MODE_TEST;
         return true;
     }
 	
@@ -225,22 +233,16 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 		 img_bw1 = null;
 		 img_bw2 = null;
 	 }
-	 
-	 private Mat InRangeCircles(Mat src)
-	 {
-		 Core.inRange(src, new Scalar(148,40,50), new Scalar(179,255,255), img_bw1);
-		 Core.inRange(src, new Scalar(0,40,50), new Scalar(10,255,255), img_bw2);
-		 Core.bitwise_or(img_bw1, img_bw2, temp);
-		 return temp;
-	 }
 
 	 public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
 		img = inputFrame.rgba();
 		
 		switch (viewMode) {
-			case VIEW_MODE_RGBA:
+		
+			case VIEW_MODE_RGBA: /** Detects the circles in the RGB format */
+				
 				frameCount++;
-				boolean drawCircles = false;
+				drawCircles = false;
 				
 				/** Setting thrust */
 				twist.dx(thrust);
@@ -254,93 +256,143 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				
 				/** Create mat for circles and apply the Hough Transform to find the circles */
 				Mat circles = new Mat();
-				Imgproc.HoughCircles(img_hue, circles, Imgproc.CV_HOUGH_GRADIENT, 3, img_hue.rows()/9, 200, 70, 0, 80 );
+				//Imgproc.HoughCircles(img_hue, circles, Imgproc.CV_HOUGH_GRADIENT, 3, img_hue.rows()/9, 200, 70, 0, 80 ); //Old attributes
+				Imgproc.HoughCircles(img_hue, circles, Imgproc.CV_HOUGH_GRADIENT, 3, minDistance, 100, 50, minRadius, maxRadius );
 				
-				//logMsg("Found "+ circles.cols() +" circles");
-				/** If two circles and the difference in their y axis is less than or equal to 20 */
-				if(circles.cols()==2 && Math.abs(circles.get(0,0)[1]-(circles.get(0,1)[1]))<=20)
-				{
-					drawCircles = true;
-					setCircleParameters(circles);
-					/// Finds midpoint between the two circles
-					double midCircle = (circle1 + circle2)/2;
-					/// Substrate from center in order to get negative distance on the left side
-					double distance = center - midCircle;
-					/// Calculate the speed based on previous distance
-					double speed = prevDistance - distance;
-					prevDistance = distance;
-					/// Calculate angle 
-					double tempAngle = Math.atan(distance/img.height());
-					/// Get angle from PD controller
-					angle = tempAngle * Kp - speed * Kd;
-					
-					// Ensure angle is within bounds
-					if (angle < -1.0)
-						angle = -1.0;
-					else if (angle > 1.0)
-						angle = 1.0;
-					
-					/** Set the angle of the twist and send twist to server */
-					twist.drz(angle);
-					sendTwist(twist);
-					//logMsg("Angle: "+angle);
-				} 
-				
-				/** If it has not seen the circles in 10 frames something is wrong */
-				if(drawCircles)
-				{
-					frameCount = 0;
-				} 
-				else if(frameCount>10)
-				{
-					sendTwist(new Twist(0,0,0,0,0,0));
-					frameCount = 0;
-					//logMsg("Lost the circles");
-				}
-				
-				/** Draw the circles */
-				for(int x=0; drawCircles==true && x<circles.cols(); x++)
-				{
-					double circle[] = circles.get(0,x);
-					int ptx = (int) Math.round(circle[0]), pty = (int) Math.round(circle[1]);
-					Point pt = new Point(ptx, pty);
-					int radius = (int)Math.round(circle[2]);
-					
-					/** Draw the circle outline */
-			        Core.circle(img, pt, radius, new Scalar(0,255,0), 3, 8, 0 );
-			        /** Draw the circle center */
-			        Core.circle(img, pt, 3, new Scalar(0,255,0), -1, 8, 0 );
-			        
-			        Core.putText(img, ""+ angle, new Point(50,100), Core.FONT_HERSHEY_COMPLEX, .8, new Scalar(255,0,0));
-				}
-				
+				/** Draws the circles and angle */
+				drawCircles(img,circles);
 				break;
-			case VIEW_MODE_BW:
-				/** This mode displays image in black/white to show what the algorithm sees */
+				
+			case VIEW_MODE_BW: /** This mode displays image in black/white to show what the algorithm sees */
+				
 				Imgproc.cvtColor(img, img_hue, Imgproc.COLOR_RGB2HSV);
 				img_hue = InRangeCircles(img_hue);
 				Imgproc.GaussianBlur(img_hue, img, new Size(9,9), 10, 10 );
 				break;
-			case VIEW_MODE_PIC:
+				
+			case VIEW_MODE_PIC: /** Takes pictures every 20 frames */
+				
 				frameCount++;
 				/// Need for normally saving raw photos 
 				Imgproc.cvtColor(img, img_hue, Imgproc.COLOR_RGB2BGR);
-				//final Mat temp = Highgui.imread("/sdcard/TestPics/test20.jpg");
-				//Imgproc.cvtColor(temp, img_hue, Imgproc.COLOR_BGR2HSV);
-				//Core.flip(img_hue, img_hue, 0);
-				//img_hue = InRangeCircles(img_hue);
-				//Imgproc.GaussianBlur(img_hue, img, new Size(9,9), 10, 10 );
-				if(frameCount%20==0)
+				Core.flip(img_hue, img_hue, 0);
+				if(frameCount%10==0)
 				{
 					//Imgproc.cvtColor(img, img_hue, Imgproc.COLOR_RGBA2BGR);
-					Highgui.imwrite( "/sdcard/TestPics/test"+frameCount+".jpg", img_hue );
+					Highgui.imwrite( "/sdcard/TestPics/test"+frameCount/10+".jpg", img_hue );
 				}
 				break;
+				
+			case VIEW_MODE_TEST: /** Testing mode for new code */
+				
+				frameCount++;
+				fileNum++;
+				if(fileNum>175)
+				{
+					fileNum = 1;
+				}
+				//Mat temp = Highgui.imread("/sdcard/TestPics/test"+fileNum+".jpg");
+				Mat temp = Highgui.imread("/sdcard/TestPics/test120.jpg"); //120
+				Imgproc.cvtColor(temp, img_hue, Imgproc.COLOR_BGR2HSV);
+				img_hue = InRangeCircles(img_hue);
+				Imgproc.GaussianBlur(img_hue, img_hue, new Size(9,9), 10, 10 );
+				/** Create mat for circles and apply the Hough Transform to find the circles */
+				Mat circles2 = new Mat();
+				Imgproc.HoughCircles(img_hue, circles2, Imgproc.CV_HOUGH_GRADIENT, 3, minDistance, 100, 40, minRadius, maxRadius );
+				/** Draws the circles and angle */
+				drawCircles(temp,circles2);
+				return temp;
+				//temp.release();
+				//break;
+				
 			default:
 				break;
 		}
 		
 		return img;
+	 }
+	 
+	 private void drawCircles(Mat img, Mat circles)
+	 {
+		 	logMsg("Found "+ circles.cols() +" circles");
+			/** If two circles and the difference in their y axis is less than or equal to 20 */
+			if(circles.cols()==2 && Math.abs(circles.get(0,0)[1]-(circles.get(0,1)[1]))<=20)
+			{
+				drawCircles = true;
+				setCircleParameters(circles);
+				/// Finds midpoint between the two circles
+				double midCircle = (circle1 + circle2)/2;
+				/// Substrate from center in order to get negative distance on the left side
+				double distance = center - midCircle;
+				/// Calculate the speed based on previous distance
+				double speed = prevDistance - distance;
+				prevDistance = distance;
+				/// Calculate angle 
+				double tempAngle = Math.atan(distance/img.height());
+				/// Get angle from PD controller
+				angle = tempAngle * Kp - speed * Kd;
+				
+				// Ensure angle is within bounds
+				if (angle < -1.0)
+					angle = -1.0;
+				else if (angle > 1.0)
+					angle = 1.0;
+				
+				/** Set the angle of the twist and send twist to server */
+				twist.drz(angle);
+				sendTwist(twist);
+				logMsg("Angle: "+angle);
+			} 
+			else if(circles.cols()<=1)
+			{
+				if(minRadius>=10)
+					minRadius -= 5;
+				if(minDistance>=30)
+					minDistance -= 10;
+				if(maxRadius<=70)
+					maxRadius +=10;
+			} else {
+				if(minRadius+1<maxRadius)
+					minRadius +=5;
+				if(maxRadius-10>minRadius)
+					maxRadius -=5;
+			}
+			
+			/** If it has not seen the circles in 10 frames something is wrong */
+			if(drawCircles)
+			{
+				frameCount = 0;
+			} 
+			else if(frameCount>10)
+			{
+				sendTwist(new Twist(0,0,0,0,0,0));
+				frameCount = 0;
+				logMsg("Lost the circles");
+			}
+			
+			/** Draw the circles */
+			for(int x=0; /* drawCircles==true  &&*/ circles.cols()>1 && x<circles.cols(); x++)
+			{
+				double circle[] = circles.get(0,x);
+				int ptx = (int) Math.round(circle[0]), pty = (int) Math.round(circle[1]);
+				Point pt = new Point(ptx, pty);
+				int radius = (int)Math.round(circle[2]);
+				
+				/** Draw the circle outline */
+		        Core.circle(img, pt, radius, new Scalar(0,255,0), 3, 8, 0 );
+		        /** Draw the circle center */
+		        Core.circle(img, pt, 3, new Scalar(0,255,0), -1, 8, 0 );
+		        
+		        Core.putText(img, ""+ angle, new Point(50,100), Core.FONT_HERSHEY_COMPLEX, .8, new Scalar(255,0,0));
+			}
+	 }
+	 
+	 private Mat InRangeCircles(Mat src)
+	 {
+		 Core.inRange(src, new Scalar(148,40,50), new Scalar(179,255,255), img_bw1);
+		 Core.inRange(src, new Scalar(0,40,50), new Scalar(10,255,255), img_bw2);
+		 Core.bitwise_or(img_bw1, img_bw2, temp);
+		 return temp;
 	 }
 	 
 	 private boolean setCircleParameters(Mat circles)
@@ -354,6 +406,9 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 			 circle1 = circles.get(0, 1)[0];
 			 circle2 = circles.get(0, 0)[0];
 		 }
+		 minRadius = (int) ((circles.get(0, 1)[2] + circles.get(0, 0)[2])/2)-10;
+		 maxRadius = minRadius + 20;
+		 minDistance = (int) (circle2 - circle1 - 10);
 		 return true;
 	 }
 
@@ -385,7 +440,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 	 
 	 private void logMsg(String msg)
 	 {
-		 //log.info(msg);
+		 log.info(msg);
 	 }
 	 
 }
