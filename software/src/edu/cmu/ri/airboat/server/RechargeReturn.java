@@ -52,7 +52,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
     public static final int VIEW_MODE_PIC = 2;
     public static final int VIEW_MODE_TEST = 3;
     
-    public static int viewMode = VIEW_MODE_TEST;
+    public static int viewMode = VIEW_MODE_RGBA;
 	
 	private MenuItem mItemRGBA;
     private MenuItem mItemBW;
@@ -70,10 +70,10 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
     
     // For the PD controller
     private double Kp = 2.5;
-    private double Kd = 0;
-    private double prevDistance = 0;
+    private double Kd = 3;
+    private double prevAngle = 0;
     
-	private double thrust = .2; //.2
+	private double thrust = .3; //.3
 	private double angle = 0;
 	/** End of parameters for controlling boat */
 	
@@ -243,12 +243,10 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				
 				frameCount++;
 				drawCircles = false;
-				
 				/** Setting thrust */
 				twist.dx(thrust);
-				
 				/** Flip image when using on boat */
-				//Core.flip(img, img, 0);
+				Core.flip(img, img, 0);
 				/** Convert it to hue, convert to range color, and blur to remove false circles */
 				Imgproc.cvtColor(img, img_hue, Imgproc.COLOR_RGB2HSV);
 				img_hue = InRangeCircles(img_hue);
@@ -256,8 +254,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				
 				/** Create mat for circles and apply the Hough Transform to find the circles */
 				Mat circles = new Mat();
-				//Imgproc.HoughCircles(img_hue, circles, Imgproc.CV_HOUGH_GRADIENT, 3, minDistance, 100, 50, minRadius, maxRadius ); //Old method
-				Imgproc.HoughCircles(img_hue, circles, Imgproc.CV_HOUGH_GRADIENT, 2, minDistance, 70, 25, minRadius, maxRadius );
+				Imgproc.HoughCircles(img_hue, circles, Imgproc.CV_HOUGH_GRADIENT, 2, minDistance, 70, 20, minRadius, maxRadius );
 				
 				/** Draws the circles and angle */
 				drawCircles(img,circles);
@@ -287,18 +284,19 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				
 				frameCount++;
 				fileNum++;
-				if(fileNum>175)
+				if(fileNum>113)
 				{
 					fileNum = 1;
 				}
 				Mat temp = Highgui.imread("/sdcard/TestPics/test"+fileNum+".jpg");
-				//Mat temp = Highgui.imread("/sdcard/TestPics/test120.jpg"); //120
+				//Mat temp = Highgui.imread("/sdcard/TestPics/test17.jpg"); //120
 				Imgproc.cvtColor(temp, img_hue, Imgproc.COLOR_BGR2HSV);
+				Imgproc.cvtColor(temp, temp, Imgproc.COLOR_BGR2RGB);
 				img_hue = InRangeCircles(img_hue);
 				Imgproc.GaussianBlur(img_hue, img_hue, new Size(9,9), 10, 10 );
 				/** Create mat for circles and apply the Hough Transform to find the circles */
 				Mat circles2 = new Mat();
-				Imgproc.HoughCircles(img_hue, circles2, Imgproc.CV_HOUGH_GRADIENT, 2, minDistance, 70, 25, minRadius, maxRadius );
+				Imgproc.HoughCircles(img_hue, circles2, Imgproc.CV_HOUGH_GRADIENT, 2, minDistance, 70, 20, minRadius, maxRadius );
 				/** Draws the circles and angle */
 				drawCircles(temp,circles2);
 				return temp;
@@ -315,6 +313,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 	 private void drawCircles(Mat img, Mat circles)
 	 {
 		 	logMsg("Found "+ circles.cols() +" circles");
+		 	
 			/** If two circles and the difference in their y axis is less than or equal to 20 */
 			if(circles.cols()==2 && Math.abs(circles.get(0,0)[1]-(circles.get(0,1)[1]))<=20)
 			{
@@ -324,13 +323,19 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				double midCircle = (circle1 + circle2)/2;
 				/// Substrate from center in order to get negative distance on the left side
 				double distance = center - midCircle;
-				/// Calculate the speed based on previous distance
-				double speed = prevDistance - distance;
-				prevDistance = distance;
 				/// Calculate angle 
 				double tempAngle = Math.atan(distance/img.height());
+				// Calculate angle change from previous
+				double angle_destination_change = (tempAngle - prevAngle) / 1; /** Need to get the dt to replace 1 */
+				prevAngle = tempAngle;
+				// use gyro information from arduino to get rotation rate of heading
+				double[] gyro = getGyro();
+				double drz = 0; 
+				if(gyro!=null)
+					drz = gyro[2];
+				
 				/// Get angle from PD controller
-				angle = tempAngle * Kp - speed * Kd;
+				angle = tempAngle * Kp - (angle_destination_change - drz) * Kd;
 				
 				// Ensure angle is within bounds
 				if (angle < -1.0)
@@ -345,18 +350,18 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 			} 
 			else if(circles.cols()<=1)
 			{
-				if(minRadius>=10)
+				if(minRadius>=10) /** Minimum radius is 5 */
 					minRadius -= 5;
-				if(minDistance>=30)
+				if(minDistance>=30) /** Minimum Distance is 20 */
 					minDistance -= 10;
-				if(maxRadius<=70)
+				if(maxRadius<=70) /** Max Radius is 80 */
 					maxRadius +=10;
 			} else {
-				if(minRadius+1<maxRadius)
+				if(minRadius+5 < maxRadius)
 					minRadius +=5;
-				if(maxRadius-10>minRadius)
-					maxRadius -=5;
-				if(minDistance+10<=100)
+				if(maxRadius-10 > minRadius)
+					maxRadius -= 10;
+				if(minDistance+10 <= 100)
 					minDistance += 10;
 			}
 			
@@ -392,7 +397,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 	 private Mat InRangeCircles(Mat src)
 	 {
 		 Core.inRange(src, new Scalar(148,40,50), new Scalar(179,255,255), img_bw1);
-		 Core.inRange(src, new Scalar(0,40,50), new Scalar(10,255,255), img_bw2);
+		 Core.inRange(src, new Scalar(0,100,100), new Scalar(10,255,255), img_bw2);
 		 Core.bitwise_or(img_bw1, img_bw2, temp);
 		 return temp;
 	 }
@@ -409,6 +414,8 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 			 circle2 = circles.get(0, 0)[0];
 		 }
 		 minRadius = (int) ((circles.get(0, 1)[2] + circles.get(0, 0)[2])/2)-10;
+		 if(minRadius<5)
+			 minRadius = 5;
 		 maxRadius = minRadius + 20;
 		 minDistance = (int) (circle2 - circle1 - 10);
 		 return true;
@@ -420,6 +427,16 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 			 vehicleServer.setVelocity(twist);
 		 else
 			 Log.e(TAG,"Not connected to server");
+	 }
+	 
+	 private double[] getGyro()
+	 {
+		 AirboatImpl vehicleServer = vehicleService.getServer();
+		 if(vehicleServer != null)
+			 return vehicleServer.getGyro();
+		 else
+			 Log.e(TAG,"Not connected to server");
+		 return null;
 	 }
 	
 	 void doBindService() {
