@@ -68,8 +68,8 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
     private int maxRadius = 80;
     private int minDistance = 25;
     
-    // For the PD controller
-    private double Kp = 2.5;
+    /** For the PD controller */
+    private double Kp = 2;
     private double Kd = 3;
     private double prevAngle = 0;
     
@@ -84,6 +84,8 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 	private int frameCount = 0;
 	boolean drawCircles = false;
 	private int fileNum = 1;
+	private long startTime = 0;
+	private long endTime = 0;
 	
 	private boolean _isBound = false;
 	
@@ -136,6 +138,9 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 		doBindService();
 		
 		twist = new Twist();
+		
+		//Start clock time for frame time
+		startTime = System.currentTimeMillis();
 	}
 
 	@Override
@@ -236,6 +241,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 
 	 public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
 		img = inputFrame.rgba();
+		endTime = System.currentTimeMillis();
 		
 		switch (viewMode) {
 		
@@ -280,7 +286,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				}
 				break;
 				
-			case VIEW_MODE_TEST: /** Testing mode for new code */
+			case VIEW_MODE_TEST: /** Testing mode for new code using the pictures as a simulation */
 				
 				frameCount++;
 				fileNum++;
@@ -299,6 +305,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				Imgproc.HoughCircles(img_hue, circles2, Imgproc.CV_HOUGH_GRADIENT, 2, minDistance, 70, 20, minRadius, maxRadius );
 				/** Draws the circles and angle */
 				drawCircles(temp,circles2);
+				startTime = System.currentTimeMillis();
 				return temp;
 				//temp.release();
 				//break;
@@ -307,6 +314,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				break;
 		}
 		
+		startTime = System.currentTimeMillis();
 		return img;
 	 }
 	 
@@ -326,7 +334,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				/// Calculate angle 
 				double tempAngle = Math.atan(distance/img.height());
 				// Calculate angle change from previous
-				double angle_destination_change = (tempAngle - prevAngle) / 1; /** Need to get the dt to replace 1 */
+				double angle_destination_change = (tempAngle - prevAngle) / (endTime - startTime); 
 				prevAngle = tempAngle;
 				// use gyro information from arduino to get rotation rate of heading
 				double[] gyro = getGyro();
@@ -335,7 +343,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 					drz = gyro[2];
 				
 				/// Get angle from PD controller
-				angle = tempAngle * Kp - (angle_destination_change - drz) * Kd;
+				angle = tempAngle * Kp + (angle_destination_change - drz) * Kd;
 				
 				// Ensure angle is within bounds
 				if (angle < -1.0)
