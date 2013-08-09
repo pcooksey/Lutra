@@ -69,8 +69,8 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
     private int minDistance = 25;
     
     /** For the PD controller */
-    private double Kp = 2;
-    private double Kd = 3;
+    private double Kp = 2.3;
+    private double Kd = 3.5;
     private double prevAngle = 0;
     
 	private double thrust = .3; //.3
@@ -252,7 +252,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				/** Setting thrust */
 				twist.dx(thrust);
 				/** Flip image when using on boat */
-				Core.flip(img, img, 0);
+				//Core.flip(img, img, 0);
 				/** Convert it to hue, convert to range color, and blur to remove false circles */
 				Imgproc.cvtColor(img, img_hue, Imgproc.COLOR_RGB2HSV);
 				img_hue = InRangeCircles(img_hue);
@@ -290,14 +290,14 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				
 				frameCount++;
 				fileNum++;
-				if(fileNum>113)
+				if(fileNum>175)
 				{
 					fileNum = 1;
 				}
 				Mat temp = Highgui.imread("/sdcard/TestPics/test"+fileNum+".jpg");
 				//Mat temp = Highgui.imread("/sdcard/TestPics/test17.jpg"); //120
 				Imgproc.cvtColor(temp, img_hue, Imgproc.COLOR_BGR2HSV);
-				Imgproc.cvtColor(temp, temp, Imgproc.COLOR_BGR2RGB);
+				//Imgproc.cvtColor(temp, temp, Imgproc.COLOR_BGR2RGB);
 				img_hue = InRangeCircles(img_hue);
 				Imgproc.GaussianBlur(img_hue, img_hue, new Size(9,9), 10, 10 );
 				/** Create mat for circles and apply the Hough Transform to find the circles */
@@ -305,10 +305,10 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 				Imgproc.HoughCircles(img_hue, circles2, Imgproc.CV_HOUGH_GRADIENT, 2, minDistance, 70, 20, minRadius, maxRadius );
 				/** Draws the circles and angle */
 				drawCircles(temp,circles2);
+				//Highgui.imwrite("/sdcard/TestPics/test"+(fileNum+2)+".jpg", temp);
+				//drawCircles(img_hue,circles2);
 				startTime = System.currentTimeMillis();
 				return temp;
-				//temp.release();
-				//break;
 				
 			default:
 				break;
@@ -386,7 +386,7 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 			}
 			
 			/** Draw the circles */
-			for(int x=0; /* drawCircles==true  &&*/ circles.cols()>1 && x<circles.cols(); x++)
+			for(int x=0; drawCircles==true  && circles.cols()>1 && x<circles.cols(); x++)
 			{
 				double circle[] = circles.get(0,x);
 				int ptx = (int) Math.round(circle[0]), pty = (int) Math.round(circle[1]);
@@ -398,14 +398,14 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 		        /** Draw the circle center */
 		        Core.circle(img, pt, 3, new Scalar(0,255,0), -1, 8, 0 );
 		        
-		        Core.putText(img, ""+ angle, new Point(50,100), Core.FONT_HERSHEY_COMPLEX, .8, new Scalar(255,0,0));
+		        //Core.putText(img, ""+ angle, new Point(50,100), Core.FONT_HERSHEY_COMPLEX, .8, new Scalar(255,0,0));
 			}
 	 }
 	 
 	 private Mat InRangeCircles(Mat src)
 	 {
 		 Core.inRange(src, new Scalar(148,40,50), new Scalar(179,255,255), img_bw1);
-		 Core.inRange(src, new Scalar(0,100,100), new Scalar(10,255,255), img_bw2);
+		 Core.inRange(src, new Scalar(0,50,50), new Scalar(10,255,255), img_bw2);
 		 Core.bitwise_or(img_bw1, img_bw2, temp);
 		 return temp;
 	 }
@@ -439,9 +439,9 @@ public class RechargeReturn extends Activity implements CvCameraViewListener2 {
 	 
 	 private double[] getGyro()
 	 {
-		 AirboatImpl vehicleServer = vehicleService.getServer();
-		 if(vehicleServer != null)
-			 return vehicleServer.getGyro();
+		 AirboatImpl vehicleImpl = vehicleService.getServer();
+		 if(vehicleImpl != null)
+			 return vehicleImpl.getGyro();
 		 else
 			 Log.e(TAG,"Not connected to server");
 		 return null;
